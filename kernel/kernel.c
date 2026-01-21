@@ -3,6 +3,11 @@
 #include "pic.h"
 #include "scheduler.h"
 #include "keyboard.h"
+#include "memory.h"
+#include "process.h"
+#include "filesystem.h"
+#include "ipc.h"
+#include "logging.h"
 
 #define VGA_WIDTH 80
 #define VGA_HEIGHT 25
@@ -208,6 +213,8 @@ int evaluate_math(const char *expr, int *result) {
 }
 
 void process_command(const char *input) {
+    char buffer[64];
+    
     // Check for /math command
     if (strncmp(input, "/math ", 6) == 0) {
         const char *expr = &input[6];
@@ -220,9 +227,8 @@ void process_command(const char *input) {
         int result;
         if (evaluate_math(expr, &result)) {
             console_puts("Result: ");
-            char result_str[32];
-            itoa(result, result_str);
-            console_puts(result_str);
+            itoa(result, buffer);
+            console_puts(buffer);
             console_puts("\n");
         } else {
             console_puts("Error: Division by zero or invalid expression\n");
@@ -243,11 +249,196 @@ void process_command(const char *input) {
         return;
     }
     
+    if (strcmp(input, "/memstat") == 0) {
+        memory_print_stats();
+        return;
+    }
+    
+    if (strcmp(input, "/procstat") == 0) {
+        process_print_stats();
+        return;
+    }
+    
+    if (strcmp(input, "/proclist") == 0) {
+        process_print_processes();
+        return;
+    }
+    
+    if (strncmp(input, "/procinfo ", 10) == 0) {
+        const char *pid_str = &input[10];
+        int pid = atoi(pid_str);
+        
+        process_t *proc = process_get_by_id(pid);
+        if (proc) {
+            console_puts("Process ID: ");
+            itoa(proc->pid, buffer);
+            console_puts(buffer);
+            console_puts("\nMemory: ");
+            itoa(proc->memory_size / 1024, buffer);
+            console_puts(buffer);
+            console_puts("KB\nThreads: ");
+            itoa(proc->thread_count, buffer);
+            console_puts(buffer);
+            console_puts("\n");
+        } else {
+            console_puts("Process not found\n");
+        }
+        return;
+    }
+    
+    if (strcmp(input, "/fsstat") == 0) {
+        filesystem_print_stats();
+        return;
+    }
+    
+    if (strcmp(input, "/ls") == 0) {
+        fs_list_files();
+        return;
+    }
+    
+    if (strncmp(input, "/cat ", 5) == 0) {
+        const char *filename = &input[5];
+        
+        int32_t fd = fs_open(filename, FILE_MODE_READ, 0);
+        if (fd < 0) {
+            console_puts("Error: File not found\n");
+            return;
+        }
+        
+        uint8_t read_buffer[1024];
+        int bytes_read = fs_read(fd, read_buffer, sizeof(read_buffer) - 1);
+        
+        if (bytes_read > 0) {
+            read_buffer[bytes_read] = '\0';
+            console_puts((const char *)read_buffer);
+            console_puts("\n");
+        } else {
+            console_puts("Error: Could not read file\n");
+        }
+        
+        fs_close(fd);
+        return;
+    }
+    
+    if (strncmp(input, "/write ", 7) == 0) {
+        // Parse: /write <filename> <text>
+        const char *cmd = &input[7];
+        char filename[64];
+        int i = 0;
+        
+        // Extract filename
+        while (cmd[i] != ' ' && cmd[i] != '\0' && i < 63) {
+            filename[i] = cmd[i];
+            i++;
+        }
+        filename[i] = '\0';
+        
+        // Skip space
+        if (cmd[i] == ' ') {
+            i++;
+        }
+        
+        const char *text = &cmd[i];
+        
+        int32_t fd = fs_open(filename, FILE_MODE_WRITE, 0);
+        if (fd < 0) {
+            console_puts("Error: Could not create file\n");
+            return;
+        }
+        
+        int bytes = 0;
+        while (text[bytes] != '\0') {
+            bytes++;
+        }
+        fs_write(fd, (const uint8_t *)text, bytes);
+        
+        fs_close(fd);
+        console_puts("File written successfully\n");
+        return;
+    }
+    
+    if (strncmp(input, "/rm ", 4) == 0) {
+        const char *filename = &input[4];
+        
+        if (fs_delete(filename) == 0) {
+            console_puts("File deleted successfully\n");
+        } else {
+            console_puts("Error: File not found\n");
+        }
+        return;
+    }
+    
+    if (strcmp(input, "/proc") == 0) {
+        console_puts("\n=== /proc - Process Information ===\n");
+        process_print_processes();
+        return;
+    }
+    
+    if (strcmp(input, "top") == 0) {
+        process_stats_t stats = {0};
+        process_get_stats(&stats);
+        
+        console_puts("\n=== System Processes (top) ===\n");
+        console_puts("Processes: ");
+        itoa(stats.total_processes, buffer);
+        console_puts(buffer);
+        console_puts(" | Running: ");
+        itoa(stats.running_processes, buffer);
+        console_puts(buffer);
+        console_puts(" | Ready: ");
+        itoa(stats.ready_processes, buffer);
+        console_puts(buffer);
+        console_puts("\n");
+        
+        console_puts("Threads: ");
+        itoa(stats.total_threads, buffer);
+        console_puts(buffer);
+        console_puts(" | Running: ");
+        itoa(stats.running_threads, buffer);
+        console_puts(buffer);
+        console_puts(" | Ready: ");
+        itoa(stats.ready_threads, buffer);
+        console_puts(buffer);
+        console_puts("\n");
+        
+        process_print_processes();
+        return;
+    }
+    
+    if (strcmp(input, "dmesg") == 0) {
+        logging_print_all();
+        return;
+    }
+    
+    if (strncmp(input, "dmesg ", 6) == 0) {
+        const char *count_str = &input[6];
+        int count = atoi(count_str);
+        if (count > 0) {
+            logging_print_recent(count);
+        } else {
+            console_puts("Invalid count\n");
+        }
+        return;
+    }
+    
     if (strcmp(input, "help") == 0) {
-        console_puts("Commands:\n");
-        console_puts("  /pr <text>     - Echo text\n");
-        console_puts("  /math <expr>   - Calculate math (e.g., /math =2+3)\n");
-        console_puts("  help           - Show this help\n");
+        console_puts("Available Commands:\n");
+        console_puts("  /pr <text>        - Echo text\n");
+        console_puts("  /math <expr>      - Calculate math (e.g., /math =2+3)\n");
+        console_puts("  /memstat          - Show memory statistics\n");
+        console_puts("  /procstat         - Show process/thread statistics\n");
+        console_puts("  /proclist         - List all processes and threads\n");
+        console_puts("  /procinfo <pid>   - Show process info\n");
+        console_puts("  /fsstat           - Show filesystem statistics\n");
+        console_puts("  /ls               - List files\n");
+        console_puts("  /cat <filename>   - Read file contents\n");
+        console_puts("  /write <file> <text> - Write to file\n");
+        console_puts("  /rm <filename>    - Delete file\n");
+        console_puts("  /proc             - View /proc filesystem\n");
+        console_puts("  top               - Show running processes\n");
+        console_puts("  dmesg             - Show all kernel logs\n");
+        console_puts("  dmesg <count>     - Show last N entries\n");
+        console_puts("  help              - Show this help\n");
         return;
     }
     
@@ -261,25 +452,49 @@ void kernel_main(void) {
     console_clear();
     
     console_puts("=== MyOS Boot ===\n");
+    console_puts("Initializing memory...\n");
+    memory_init();
+    
+    console_puts("Initializing logging...\n");
+    logging_init();
+    log_info("Kernel initialization started");
+    
+    console_puts("Initializing filesystem...\n");
+    filesystem_init();
+    log_info("Filesystem initialized");
+    
+    console_puts("Initializing IPC...\n");
+    ipc_init();
+    log_info("IPC system initialized");
+    
+    console_puts("Initializing process manager...\n");
+    process_manager_init();
+    log_info("Process manager initialized");
+    
     console_puts("Initializing PIC...\n");
     pic_remap();
+    log_info("PIC remapped");
     
     console_puts("Initializing IDT...\n");
     idt_init();
+    log_info("IDT initialized");
     
     console_puts("Initializing scheduler...\n");
     scheduler_init();
+    log_info("Scheduler initialized");
     
     console_puts("Initializing PIT...\n");
     pit_init();
+    log_info("PIT initialized");
     
     console_puts("Initializing keyboard...\n");
     keyboard_init();
+    log_info("Keyboard initialized");
     
     // Set keyboard callback for real-time display
     keyboard_set_display_callback(console_putchar);
     
-    console_puts("\nReady! Type /pr <text> to echo.\n");
+    console_puts("\nReady! Type 'help' for commands.\n");
     console_puts("> ");
     
     asm volatile("sti");

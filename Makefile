@@ -18,7 +18,12 @@ kernel.bin: iso/boot/grub
 	$(CC) $(CFLAGS) -c kernel/keyboard.c -o keyboard.o
 	$(CC) $(CFLAGS) -c kernel/pic.c -o pic.o
 	$(CC) $(CFLAGS) -c kernel/scheduler.c -o scheduler.o
-	$(LD) $(LDFLAGS) boot.o isr.o kernel.o idt.o keyboard.o pic.o scheduler.o -o kernel.bin
+	$(CC) $(CFLAGS) -c kernel/memory.c -o memory.o
+	$(CC) $(CFLAGS) -c kernel/process.c -o process.o
+	$(CC) $(CFLAGS) -c kernel/filesystem.c -o filesystem.o
+	$(CC) $(CFLAGS) -c kernel/ipc.c -o ipc.o
+	$(CC) $(CFLAGS) -c kernel/logging.c -o logging.o
+	$(LD) $(LDFLAGS) boot.o isr.o kernel.o idt.o keyboard.o pic.o scheduler.o memory.o process.o filesystem.o ipc.o logging.o -o kernel.bin
 
 
 iso/myos.iso: kernel.bin
