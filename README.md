@@ -63,7 +63,7 @@ Developer notes
 - To rebuild only userland: `cd userland && make`
 - The kernel embeds `displayd.elf` (if present) into the ramfs on boot as a convenience fallback.
 
-How to push this repo to GitHub (do not paste credentials here)
+How to push this repo to GitHub
 -----------------------------------------------------------
 I cannot use or accept your GitHub credentials. To push the local commit to GitHub run these commands from your machine where you have your credentials configured:
 
@@ -85,8 +85,5 @@ Do not paste passwords or tokens in this chat. If you want, I can provide a shor
 
 License
 -------
-This project is experimental and provided as-is. Add a license file if you intend to publish it.
+This project is experimental and provided as-is. Credit me if you fork it.
 
-Contact / Next steps
---------------------
-- Want mouse support, better fonts, or userland file manager? Tell me which and I'll implement the next steps.
