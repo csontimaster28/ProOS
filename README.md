@@ -1,0 +1,92 @@
+ProOS v0.0.2a
+================
+
+Summary
+-------
+ProOS is a small hobby 32-bit toy operating system (bootable ISO) demonstrating a basic kernel, a framebuffer-based desktop UI, a tiny ramfs, and a minimal syscall/ELF userland loader.
+
+What works (current release)
+----------------------------
+- Bootable ISO: iso/myos.iso (built from this repo)
+- Desktop UI: taskbar, start menu, desktop icons
+- Cursor: keyboard-driven cursor (WASD to move, E to click)
+- Terminal: toggleable terminal (T) and terminal icon
+- File manager: kernel-space file manager window; can create folders from the GUI
+- Userland: simple userland GUI daemons in `userland/*.elf` (gfxd, displayd, hello_gui)
+- Syscalls: basic syscall trap (int 0x80) and framebuffer syscalls (info/ptr/swap)
+
+Limitations / Known issues
+--------------------------
+- No mouse driver yet — cursor is keyboard-driven.
+- Very small/placeholder font and graphics (block-based rendering).
+- The framebuffer is a simple RAM buffer; no full VESA LFB mapping.
+- File manager is implemented in-kernel for the MVP (not yet full userland GUI app).
+
+Quick usage
+-----------
+Build everything (from WSL Ubuntu 22.04 or equivalent cross-build environment):
+
+```bash
+cd /home/dev/myos
+make -j4
+```
+
+Generate and run the ISO in QEMU (headful):
+
+```bash
+qemu-system-i386 -cdrom iso/myos.iso -vga std -m 512
+```
+
+Capture serial boot log (optional):
+
+```bash
+qemu-system-i386 -cdrom iso/myos.iso -vga std -m 512 -serial file:/path/to/qemu_kernel.log
+```
+
+Controls (keyboard-driven)
+-------------------------
+- Move desktop cursor: `W` / `A` / `S` / `D`
+- Click / select: `E`
+- Toggle terminal: `T` (or click Terminal icon)
+- Desktop icons (left→right): Terminal, Create Folder, File Manager
+
+Filesystem
+----------
+- Simple in-memory ramfs implemented in `kernel/filesystem.c`.
+- You can create folders from the desktop (Create Folder icon).
+- The kernel exposes a tiny `fs_*` API for file and directory operations.
+
+Developer notes
+---------------
+- Kernel source: `kernel/`
+- Userland source: `userland/` (includes a small `Makefile` to build ELF binaries)
+- To rebuild only userland: `cd userland && make`
+- The kernel embeds `displayd.elf` (if present) into the ramfs on boot as a convenience fallback.
+
+How to push this repo to GitHub (do not paste credentials here)
+-----------------------------------------------------------
+I cannot use or accept your GitHub credentials. To push the local commit to GitHub run these commands from your machine where you have your credentials configured:
+
+```bash
+# if you haven't already
+git remote add origin git@github.com:<your-username>/<repo>.git
+git branch -M main
+git push -u origin main
+```
+
+If you prefer HTTPS, use:
+
+```bash
+git remote add origin https://github.com/<your-username>/<repo>.git
+git push -u origin main
+```
+
+Do not paste passwords or tokens in this chat. If you want, I can provide a short step-by-step for creating a GitHub repository, adding the remote, and pushing.
+
+License
+-------
+This project is experimental and provided as-is. Add a license file if you intend to publish it.
+
+Contact / Next steps
+--------------------
+- Want mouse support, better fonts, or userland file manager? Tell me which and I'll implement the next steps.

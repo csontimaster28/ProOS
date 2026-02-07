@@ -48,6 +48,7 @@ typedef struct {
     process_state_t state;             // Process state
     void *memory_start;                // Process memory start
     uint32_t memory_size;              // Process memory size
+    uint32_t capabilities;             // Capability bitmask for this process
     thread_t *main_thread;             // Main thread
     thread_t *threads[MAX_THREADS_PER_PROCESS];  // Thread list
     uint32_t thread_count;             // Number of threads
@@ -72,10 +73,21 @@ typedef struct {
 void process_manager_init(void);
 
 // Process management
-uint32_t process_create(void (*entry)(void), uint32_t memory_size, const char *name);
+uint32_t process_create(void (*entry)(void), uint32_t memory_size, const char *name, uint32_t capabilities);
+// Create a process from an ELF file located in the ram filesystem
+uint32_t process_create_elf(const char *path, uint32_t memory_size, const char *name, uint32_t capabilities);
 int process_terminate(uint32_t pid);
 process_t* process_get_by_id(uint32_t pid);
 process_state_t process_get_state(uint32_t pid);
+
+// Return current executing process id
+uint32_t process_get_current_pid(void);
+
+// Check whether a pid has a capability
+int process_has_cap(uint32_t pid, uint32_t cap);
+
+// Check whether a pointer/region lies within a process's memory region
+int process_mem_check(uint32_t pid, const void *ptr, uint32_t size);
 
 // Thread management
 uint32_t thread_create(uint32_t pid, void (*entry)(void), uint32_t priority);

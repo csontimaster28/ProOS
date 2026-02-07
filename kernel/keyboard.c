@@ -72,6 +72,15 @@ void keyboard_handler(void) {
     
     if (!c) return;
 
+    // Cursor movement and click bindings for desktop (WASD + E)
+    if (c == 'w') { extern void gui_move_cursor(int,int); gui_move_cursor(0,-4); return; }
+    if (c == 's') { extern void gui_move_cursor(int,int); gui_move_cursor(0,4); return; }
+    if (c == 'a') { extern void gui_move_cursor(int,int); gui_move_cursor(-4,0); return; }
+    if (c == 'd') { extern void gui_move_cursor(int,int); gui_move_cursor(4,0); return; }
+    if (c == 'e') { extern void gui_click(void); gui_click(); return; }
+    // Toggle graphical terminal when user presses 't' (legacy shortcut)
+    if (c == 't') { extern void keyboard_toggle_console(void); keyboard_toggle_console(); return; }
+
     // Handle newline - mark buffer as ready
     if (c == '\n') {
         if (buffer_pos < INPUT_BUFFER_SIZE - 1) {

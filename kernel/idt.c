@@ -3,6 +3,7 @@
 extern void isr_keyboard(void);
 extern void isr_timer(void);
 extern void isr_stub(void);  // Default handler for all interrupts
+extern void isr_syscall(void);
 
 static struct idt_entry idt[256];
 static struct idt_ptr idtp;
@@ -28,6 +29,13 @@ void idt_init(void) {
     
     // Keyboard IRQ1 → 0x21 (PIC remap után)
     idt_set_gate(0x21, (uint32_t)isr_keyboard);
+
+    // Syscall interrupt (int 0x80) - allow userland (DPL=3)
+    idt[0x80].base_low  = ((uint32_t)isr_syscall) & 0xFFFF;
+    idt[0x80].selector  = 0x08;
+    idt[0x80].zero      = 0;
+    idt[0x80].flags     = 0xEE; // present, ring 3, interrupt gate
+    idt[0x80].base_high = (((uint32_t)isr_syscall) >> 16) & 0xFFFF;
 
     asm volatile("lidt %0" : : "m"(idtp));
 }

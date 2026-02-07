@@ -48,6 +48,9 @@ typedef struct {
     uint32_t modified_ticks;    // Modification time
     uint8_t *data;              // Pointer to file data
     uint8_t is_used;            // 1 if inode is in use
+    uint8_t is_directory;       // 1 if this inode is a directory
+    uint32_t parent_inode;      // Parent inode index (for directories)
+    uint32_t children[16];      // Child inode indices (for directories)
 } inode_t;
 
 // Filesystem statistics
@@ -62,6 +65,12 @@ typedef struct {
 
 // Initialize filesystem
 void filesystem_init(void);
+
+// Directory operations
+int fs_create_folder(const char *name);
+int fs_change_dir(const char *name);
+const char* fs_get_cwd(void);
+int fs_rename(const char *oldname, const char *newname);
 
 // File operations
 int32_t fs_open(const char *filename, file_mode_t mode, uint32_t pid);

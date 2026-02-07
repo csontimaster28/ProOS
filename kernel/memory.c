@@ -1,4 +1,5 @@
 #include "memory.h"
+#include "event.h"
 
 // Memory pool
 static uint8_t memory_pool[MEMORY_SIZE] __attribute__((section(".bss")));
@@ -73,6 +74,8 @@ void *malloc(size_t size) {
     memory_block_t *block = find_free_block(total_size);
     
     if (!block) {
+        // Emit OOM event and return
+        event_emit_text(EVENT_OOM, "malloc failed");
         return NULL;  // Out of memory
     }
     

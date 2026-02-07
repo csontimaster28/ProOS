@@ -1,5 +1,8 @@
 #include "process.h"
+#include "event.h"
 #include "memory.h"
+#include "filesystem.h"
+#include "logging.h"
 
 // Global process manager
 static process_manager_t pm = {0};
@@ -20,8 +23,31 @@ void process_manager_init(void) {
     pm.current_thread = NULL;
 }
 
+uint32_t process_get_current_pid(void) {
+    return pm.current_pid;
+}
+
+int process_has_cap(uint32_t pid, uint32_t cap) {
+    // pid 0 (kernel) is privileged
+    if (pid == 0) return 1;
+    process_t *p = process_get_by_id(pid);
+    if (!p) return 0;
+    return (p->capabilities & cap) ? 1 : 0;
+}
+
+int process_mem_check(uint32_t pid, const void *ptr, uint32_t size) {
+    process_t *p = process_get_by_id(pid);
+    if (!p) return 0;
+    if (!p->memory_start) return 0;
+    uint8_t *start = (uint8_t *)p->memory_start;
+    uint8_t *end = start + p->memory_size;
+    uint8_t *pp = (uint8_t *)ptr;
+    if (pp >= start && (pp + size) <= end) return 1;
+    return 0;
+}
+
 // Create a new process
-uint32_t process_create(void (*entry)(void), uint32_t memory_size, const char *name) {
+uint32_t process_create(void (*entry)(void), uint32_t memory_size, const char *name, uint32_t capabilities) {
     if (pm.process_count >= MAX_PROCESSES) {
         return 0;  // Too many processes
     }
@@ -42,9 +68,13 @@ uint32_t process_create(void (*entry)(void), uint32_t memory_size, const char *n
     proc->state = PROC_CREATED;
     proc->memory_start = proc_memory;
     proc->memory_size = memory_size;
+    proc->capabilities = capabilities;
     proc->thread_count = 0;
     proc->created_ticks = 0;  // TODO: use actual tick count
     
+    // Make process visible to lookup before creating threads
+    pm.process_count++;
+
     // Create main thread
     uint32_t tid = thread_create(proc->pid, entry, 5);
     if (tid == 0) {
@@ -54,8 +84,111 @@ uint32_t process_create(void (*entry)(void), uint32_t memory_size, const char *n
     
     proc->main_thread = thread_get_by_id(tid);
     proc->state = PROC_READY;
+    // Notify event bus about process start
+    if (name) {
+        event_emit_text(EVENT_PROC_START, name);
+    } else {
+        event_emit_text(EVENT_PROC_START, "<unnamed>");
+    }
+
+    return proc->pid;
+}
+
+
+
+// Minimal ELF loader for ELF32 little-endian (assumes PT_LOAD vaddrs are small and fit within process memory)
+uint32_t process_create_elf(const char *path, uint32_t memory_size, const char *name, uint32_t capabilities) {
+    if (pm.process_count >= MAX_PROCESSES) return 0;
+    if (!path) return 0;
+
+    // Allocate process memory
+    void *proc_memory = malloc(memory_size);
+    if (!proc_memory) return 0;
+
+    // Read file from filesystem (kernel context, pid 0)
+    uint32_t fsize = fs_filesize(path);
+    if (fsize == 0 || fsize > memory_size) {
+        free(proc_memory);
+        return 0;
+    }
+
+    int32_t fd = fs_open(path, FILE_MODE_READ, 0);
+    if (fd < 0) { free(proc_memory); return 0; }
+
+    uint8_t *filebuf = (uint8_t *)malloc(fsize);
+    if (!filebuf) { fs_close(fd); free(proc_memory); return 0; }
+
+    uint32_t read_total = 0;
+    while (read_total < fsize) {
+        int r = fs_read(fd, filebuf + read_total, fsize - read_total);
+        if (r <= 0) break;
+        read_total += r;
+    }
+    fs_close(fd);
+    if (read_total == 0) { free(filebuf); free(proc_memory); return 0; }
+
+    // Basic ELF header checks
+    if (read_total < 0x34) { free(filebuf); free(proc_memory); return 0; }
+    uint8_t *e = filebuf;
+    if (!(e[0] == 0x7F && e[1] == 'E' && e[2] == 'L' && e[3] == 'F')) {
+        free(filebuf); free(proc_memory); return 0;
+    }
+    // Only support 32-bit little-endian
+    if (e[4] != 1 || e[5] != 1) { free(filebuf); free(proc_memory); return 0; }
+
+    // Parse ELF header fields (little-endian)
+    uint32_t e_entry = *(uint32_t*)(filebuf + 0x18);
+    uint32_t e_phoff = *(uint32_t*)(filebuf + 0x1C);
+    uint16_t e_phentsize = *(uint16_t*)(filebuf + 0x2A);
+    uint16_t e_phnum = *(uint16_t*)(filebuf + 0x2C);
+
+    // Load program headers
+    for (uint16_t i = 0; i < e_phnum; i++) {
+        uint32_t ph = e_phoff + i * e_phentsize;
+        if (ph + 32 > read_total) break;
+        uint32_t p_type = *(uint32_t*)(filebuf + ph + 0x0);
+        uint32_t p_offset = *(uint32_t*)(filebuf + ph + 0x4);
+        uint32_t p_vaddr = *(uint32_t*)(filebuf + ph + 0x8);
+        uint32_t p_filesz = *(uint32_t*)(filebuf + ph + 0x10);
+        uint32_t p_memsz = *(uint32_t*)(filebuf + ph + 0x14);
+
+        if (p_type != 1) continue; // PT_LOAD
+        // Validate sizes
+        if (p_offset + p_filesz > read_total) { free(filebuf); free(proc_memory); return 0; }
+        if (p_vaddr + p_memsz > memory_size) { free(filebuf); free(proc_memory); return 0; }
+        // Copy file data into process memory at offset p_vaddr
+        uint8_t *dst = (uint8_t*)proc_memory + p_vaddr;
+        for (uint32_t k = 0; k < p_filesz; k++) dst[k] = filebuf[p_offset + k];
+        // Zero bss
+        for (uint32_t k = p_filesz; k < p_memsz; k++) dst[k] = 0;
+    }
+
+    free(filebuf);
+
+    // Create process structure
+    process_t *proc = &pm.processes[pm.process_count];
+    proc->pid = pm.next_pid++;
+    proc->state = PROC_CREATED;
+    proc->memory_start = proc_memory;
+    proc->memory_size = memory_size;
+    proc->capabilities = capabilities;
+    proc->thread_count = 0;
+    proc->created_ticks = 0;
+
     pm.process_count++;
-    
+
+    // Create main thread with entry at proc_memory + e_entry
+    void (*entry_ptr)(void) = (void(*)(void))((uint8_t*)proc_memory + e_entry);
+    uint32_t tid = thread_create(proc->pid, entry_ptr, 5);
+    if (tid == 0) {
+        free(proc_memory);
+        return 0;
+    }
+    proc->main_thread = thread_get_by_id(tid);
+    proc->state = PROC_READY;
+    if (name) event_emit_text(EVENT_PROC_START, name);
+    else event_emit_text(EVENT_PROC_START, "<unnamed>");
+
     return proc->pid;
 }
 
@@ -79,6 +212,10 @@ int process_terminate(uint32_t pid) {
     }
     
     proc->state = PROC_TERMINATED;
+    // Notify event bus about process exit
+    char buf[32];
+    itoa(pid, buf);
+    event_emit_text(EVENT_PROC_EXIT, buf);
     return 1;
 }
 
