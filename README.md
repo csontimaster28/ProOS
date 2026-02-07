@@ -63,27 +63,8 @@ Developer notes
 - To rebuild only userland: `cd userland && make`
 - The kernel embeds `displayd.elf` (if present) into the ramfs on boot as a convenience fallback.
 
-How to push this repo to GitHub
------------------------------------------------------------
-I cannot use or accept your GitHub credentials. To push the local commit to GitHub run these commands from your machine where you have your credentials configured:
-
-```bash
-# if you haven't already
-git remote add origin git@github.com:<your-username>/<repo>.git
-git branch -M main
-git push -u origin main
-```
-
-If you prefer HTTPS, use:
-
-```bash
-git remote add origin https://github.com/<your-username>/<repo>.git
-git push -u origin main
-```
-
-Do not paste passwords or tokens in this chat. If you want, I can provide a short step-by-step for creating a GitHub repository, adding the remote, and pushing.
-
 License
 -------
 This project is experimental and provided as-is. Credit me if you fork it.
+
 
