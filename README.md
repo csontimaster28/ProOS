@@ -5,6 +5,8 @@ Summary
 -------
 ProOS is a small hobby 32-bit toy operating system (bootable ISO) demonstrating a basic kernel, a framebuffer-based desktop UI, a tiny ramfs, and a minimal syscall/ELF userland loader.
 
+#Important Notice: if you know why the UI does not work please contact me in email!
+
 What works (current release)
 ----------------------------
 - Bootable ISO: iso/myos.iso (built from this repo)
